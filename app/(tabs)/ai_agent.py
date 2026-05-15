@@ -39,6 +39,7 @@ def run_python(code: str) -> str:
 def read_file(path: str) -> str:
     """Read a file from disk."""
     try:
+        
         with open(path, "r") as f:
             return f.read()[:2000]
     except Exception as e:
