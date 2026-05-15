@@ -1,5 +1,4 @@
-﻿import Constants from 'expo-constants';
-import { StatusBar } from 'expo-status-bar';
+﻿import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
@@ -16,54 +15,105 @@ import {
 type Message = {
   id: string;
   text: string;
-  sender: 'user' | 'ai';
+  sender: 'user' | 'assistant';
+  time: string;
 };
 
 const quickActions = [
   {
-    label: 'Plan my day',
+    label: 'Plan my day / خطط يومي',
     prompt: 'Help me plan my day with a morning routine and 3 top priorities.',
   },
   {
-    label: 'Write email',
-    prompt: 'Write a professional email requesting a meeting next week.',
+    label: 'Write email / اكتب بريدًا',
+    prompt: 'Draft a professional email requesting a meeting next week.',
   },
   {
-    label: 'Set reminder',
-    prompt: 'Set a reminder for my workout tomorrow at 7 AM.',
+    label: 'Set reminder / اضبط تذكيرًا',
+    prompt: 'Create a quick reminder for my workout tomorrow at 7 AM.',
+  },
+  {
+    label: 'Find music / ابحث عن موسيقى',
+    prompt: 'Find a song or music recommendation for a relaxed evening.',
+  },
+  {
+    label: 'مرحبا / Hello',
+    prompt: 'مرحبا، كيف يمكنني مساعدتك اليوم؟',
   },
 ];
 
-const fallbackMessages: Message[] = [
+const initialMessages: Message[] = [
   {
     id: '1',
-    text: 'Hello! I am your local assistant. Ask me anything and I will respond without cloud services.',
-    sender: 'ai',
+    text: 'Welcome to Modern. I am your local assistant, designed to behave like a polished chat experience. / مرحبًا بك في مودرن. أنا مساعدك المحلي المصمم ليكون تجربة دردشة احترافية.',
+    sender: 'assistant',
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   },
 ];
 
+const replyMap: { match: RegExp; reply: string }[] = [
+  {
+    match: /\b(hello|hi|hey|مرحبا|أهلاً|أهلا|هلا)\b/i,
+    reply: 'Hello! I can help you with planning, writing, brainstorming, or any quick question.',
+  },
+  {
+    match: /\b(plan|schedule|today|tomorrow|خطط|جدول|اليوم|غداً)\b/i,
+    reply: 'Absolutely. Share your goals and I will create a clean plan for your day.',
+  },
+  {
+    match: /\b(email|meeting|invite|request|بريد|اجتماع|دعوة|طلب)\b/i,
+    reply: 'I can draft a strong professional message for you. Tell me the subject and audience.',
+  },
+  {
+    match: /\b(remind|reminder|remember|note|تذكير|ذكر|ملاحظة)\b/i,
+    reply: 'I can format a reminder for you with the right details and timing.',
+  },
+  {
+    match: /\b(music|song|track|playlist|أغنية|موسيقى|برومو)\b/i,
+    reply: 'Looking for music? I recommend a relaxing playlist with soulful tracks and popular new hits.',
+  },
+  {
+    match: /\b(thank|thanks|شكراً|شكرا|متشكر|مشكور)\b/i,
+    reply: 'You are welcome! Feel free to ask for anything else.',
+  },
+  {
+    match: /(?:\b|^)(?:what is|who is|define|explain|how do i|how can i|why does|why is|when should|where can i|where is|how to)\b/i,
+    reply: 'That sounds like a good question. I can explain it clearly and help you understand the best next steps.',
+  },
+  {
+    match: /(?:\b|^)(?:كيف|ما هو|ما هي|من هو|من هي|عرف|اشرح|كيف يمكنني|كيف أفعل|لماذا|متى|أين)\b/i,
+    reply: 'بالطبع! أرسل سؤالك وسأقدّم لك إجابة واضحة ومفيدة قدر الإمكان.',
+  },
+];
+
+const arabicDefaultReply =
+  'رائع! يمكنني مساعدتك في الأفكار والتنظيم والمشورة الواضحة. أخبرني بالمزيد لأرد بدقة.';
+
 const generateLocalReply = (text: string) => {
-  const lower = text.toLowerCase();
-  if (lower.includes('hello') || lower.includes('hi')) {
-    return 'Hi! I can help you plan, write, or answer questions using local logic.';
+  const cleanedText = text.trim();
+  const candidate = replyMap.find((item) => item.match.test(cleanedText));
+  const isArabic = /[\u0600-\u06FF]/.test(cleanedText);
+  const isQuestion = /[؟?]$/.test(cleanedText) || /\b(what|why|how|when|where|who|which|did|do|does|can|could|would|should|هل|متى|أين|كيف|لماذا|ما|من)\b/i.test(cleanedText);
+
+  if (candidate) {
+    return candidate.reply;
   }
-  if (lower.includes('plan') || lower.includes('schedule')) {
-    return 'Sure, I can help you outline your day and priorities. Tell me your main goals.';
+
+  if (isQuestion) {
+    return isArabic
+      ? `بالطبع، سؤالك: "${cleanedText}". سأقدّم لك إجابة مفيدة وواضحة بناءً على ذلك.`
+      : `Sure, your question is: "${cleanedText}". Here is a helpful and clear answer based on that.`;
   }
-  if (lower.includes('email')) {
-    return 'I can draft an email for you. Share who it is for and the main message.';
-  }
-  if (lower.includes('remind') || lower.includes('reminder')) {
-    return 'I can help you remember something. What should I remind you about and when?';
-  }
-  if (lower.includes('thank')) {
-    return 'You are welcome! Ask me anything else when you are ready.';
-  }
-  return 'That sounds great! I am here to help with ideas, planning, and quick answers.';
+
+  return isArabic
+    ? arabicDefaultReply
+    : 'That sounds great. I can help with ideas, organization, and clear advice. Tell me more so I can respond precisely.';
 };
 
+const formatTime = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 export default function HomeScreen() {
-  const [messages, setMessages] = useState<Message[]>(fallbackMessages);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const listRef = useRef<FlatList<Message> | null>(null);
@@ -74,41 +124,60 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
-  const sendMessage = async (textOverride?: string) => {
-    const message = (textOverride ?? inputText).trim();
-    if (!message) return;
+  const sendMessage = (overrideText?: string) => {
+    const messageText = (overrideText ?? inputText).trim();
+    if (!messageText) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: message,
+      text: messageText,
       sender: 'user',
+      time: formatTime(new Date()),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    if (!textOverride) {
+    if (!overrideText) {
       setInputText('');
     }
     setIsTyping(true);
 
-    const aiReply = generateLocalReply(message);
+    const aiReply = generateLocalReply(messageText);
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           text: aiReply,
-          sender: 'ai',
+          sender: 'assistant',
+          time: formatTime(new Date()),
         },
       ]);
       setIsTyping(false);
-    }, 500);
+    }, 600);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.sender === 'user';
+    const isRtl = /[\u0600-\u06FF]/.test(item.text);
     return (
-      <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.aiBubble]}>
-        <Text style={[styles.messageText, isUser ? styles.userText : styles.aiText]}>{item.text}</Text>
+      <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAssistant]}>
+        <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+          <View style={styles.metaRow}>
+            <Text style={[styles.messageLabel, isUser ? styles.userLabel : styles.assistantLabel]}>
+              {isUser ? 'You' : 'Modern'}
+            </Text>
+            <Text style={styles.messageTime}>{item.time}</Text>
+          </View>
+          <Text
+            style={[
+              styles.messageText,
+              isUser ? styles.userText : styles.assistantText,
+              isRtl ? styles.rtlText : styles.ltrText,
+            ]}
+          >
+            {item.text}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -116,21 +185,27 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
+      <View style={styles.topBar}>
+        <Text style={styles.topBarTitle}>Modern</Text>
+        <Text style={styles.topBarSubtitle}>Professional local chat assistant • مساعد محلي احترافي</Text>
+      </View>
+
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Modern</Text>
-          <Text style={styles.headerSubtitle}>Manual assistant mode — no cloud service required.</Text>
-        </View>
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.chatContainer}
+          showsVerticalScrollIndicator={false}
+        />
 
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Local thinking, polished design</Text>
-          <Text style={styles.heroDescription}>
-            Ask questions, get structured replies, and use quick prompts all from local app logic.
-          </Text>
+        <View style={styles.actionBar}>
+          <Text style={styles.actionTitle}>Try a prompt / جرّب سؤال</Text>
           <View style={styles.quickActionRow}>
             {quickActions.map((action) => (
               <TouchableOpacity
@@ -144,144 +219,149 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.chatContainer}
-          showsVerticalScrollIndicator={false}
-        />
-
         <View style={styles.footer}>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type a message..."
-              placeholderTextColor="#9CA3AF"
-              value={inputText}
-              onChangeText={setInputText}
-              onSubmitEditing={() => sendMessage()}
-              returnKeyType="send"
-            />
-            <TouchableOpacity style={styles.sendButton} onPress={() => sendMessage()}>
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
-          </View>
-          {isTyping ? <Text style={styles.typingLabel}>Assistant is typing...</Text> : null}
+          <TextInput
+            style={styles.input}
+            placeholder="Send a message... / أرسل رسالة..."
+            placeholderTextColor="#9CA3AF"
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={() => sendMessage()}
+            returnKeyType="send"
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={() => sendMessage()}>
+            <Text style={styles.sendButtonText}>Send / إرسال</Text>
+          </TouchableOpacity>
         </View>
+
+        {isTyping ? (
+          <View style={styles.typingContainer}>
+            <Text style={styles.typingText}>Modern is typing...</Text>
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
-  container: { flex: 1 },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 16,
+  safeArea: { flex: 1, backgroundColor: '#F4F7FB' },
+  topBar: {
     paddingHorizontal: 20,
+    paddingVertical: 18,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  headerTitle: {
+  topBarTitle: {
     fontSize: 28,
     fontWeight: '800',
     color: '#0F172A',
   },
-  headerSubtitle: {
-    marginTop: 8,
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: '92%',
+  topBarSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#64748B',
   },
-  heroCard: {
-    marginHorizontal: 16,
-    marginVertical: 16,
-    padding: 20,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
+  container: { flex: 1 },
+  chatContainer: { padding: 16, paddingBottom: 20 },
+  messageRow: { marginBottom: 10 },
+  messageRowUser: { alignItems: 'flex-end' },
+  messageRowAssistant: { alignItems: 'flex-start' },
+  messageBubble: {
+    maxWidth: '88%',
+    borderRadius: 20,
+    padding: 16,
     shadowColor: '#000',
     shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  heroDescription: {
-    marginTop: 10,
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  quickActionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 18,
-  },
-  quickActionButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: '#EFF6FF',
-  },
-  quickActionText: {
-    color: '#1D4ED8',
-    fontWeight: '600',
-  },
-  chatContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-  },
-  messageBubble: {
-    maxWidth: '82%',
-    padding: 16,
-    borderRadius: 22,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 3,
   },
   userBubble: {
     backgroundColor: '#2563EB',
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: 4,
   },
-  aiBubble: {
+  assistantBubble: {
     backgroundColor: '#FFFFFF',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  messageLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  userLabel: {
+    color: '#E0F2FE',
+  },
+  assistantLabel: {
+    color: '#0F172A',
+  },
+  messageTime: {
+    fontSize: 12,
+    color: '#94A3B8',
   },
   messageText: {
     fontSize: 16,
     lineHeight: 24,
   },
+  rtlText: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  ltrText: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
   userText: {
     color: '#FFFFFF',
   },
-  aiText: {
+  assistantText: {
     color: '#0F172A',
   },
-  footer: {
+  actionBar: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: 12,
+    backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },
-  inputWrapper: {
+  actionTitle: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  quickActionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+  },
+  quickActionButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  quickActionText: {
+    color: '#1D4ED8',
+    fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
   },
   input: {
     flex: 1,
@@ -296,6 +376,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
     borderRadius: 999,
     paddingHorizontal: 18,
+    paddingVertical: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -304,9 +385,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  typingLabel: {
-    marginTop: 10,
-    color: '#64748B',
+  typingContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#F8FAFC',
+  },
+  typingText: {
+    color: '#475569',
     fontSize: 13,
   },
 });

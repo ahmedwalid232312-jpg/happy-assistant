@@ -1,1 +1,3 @@
-﻿const appJson = require('./app.json');\nmodule.exports = appJson;\n
+﻿const appJson = require('./app.json');
+module.exports = appJson;
+
