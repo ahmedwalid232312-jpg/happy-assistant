@@ -4,13 +4,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
-  NativeSyntheticEvent,
   Platform,
   SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
-  TextInputSubmitEditingEventData,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -36,23 +34,39 @@ const quickActions = [
   },
 ];
 
-const initialMessages: Message[] = [
+const fallbackMessages: Message[] = [
   {
     id: '1',
-    text: 'Good morning! ☀️ I am your daily assistant. How can I make your day better?',
+    text: 'Hello! I am your local assistant. Ask me anything and I will respond without cloud services.',
     sender: 'ai',
   },
 ];
 
+const generateLocalReply = (text: string) => {
+  const lower = text.toLowerCase();
+  if (lower.includes('hello') || lower.includes('hi')) {
+    return 'Hi! I can help you plan, write, or answer questions using local logic.';
+  }
+  if (lower.includes('plan') || lower.includes('schedule')) {
+    return 'Sure, I can help you outline your day and priorities. Tell me your main goals.';
+  }
+  if (lower.includes('email')) {
+    return 'I can draft an email for you. Share who it is for and the main message.';
+  }
+  if (lower.includes('remind') || lower.includes('reminder')) {
+    return 'I can help you remember something. What should I remind you about and when?';
+  }
+  if (lower.includes('thank')) {
+    return 'You are welcome! Ask me anything else when you are ready.';
+  }
+  return 'That sounds great! I am here to help with ideas, planning, and quick answers.';
+};
+
 export default function HomeScreen() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>(fallbackMessages);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
   const listRef = useRef<FlatList<Message> | null>(null);
-
-  const claudeApiKey =
-    Constants.expoConfig?.extra?.claudeApiKey || process.env.CLAUDE_API_KEY || '';
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -60,118 +74,41 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
-  const generateAiResponse = (text: string) => {
-    const lower = text.toLowerCase();
-    if (lower.includes('hello') || lower.includes('hi')) {
-      return 'Hello there! How can I support you today? 😊';
-    }
-    if (lower.includes('weather')) {
-      return 'I can help you check the weather in your area. Where are you located?';
-    }
-    if (lower.includes('remind') || lower.includes('reminder')) {
-      return 'I can help you set a reminder. What would you like to remember?';
-    }
-    if (lower.includes('joke')) {
-      return 'Why did the computer get cold? Because it left its Windows open! 😂';
-    }
-    return 'That sounds wonderful! I am here to help you get that done. 😊✨';
-  };
-
   const sendMessage = async (textOverride?: string) => {
-    const trimmedText = (textOverride ?? inputText).trim();
-    if (trimmedText === '') return;
+    const message = (textOverride ?? inputText).trim();
+    if (!message) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: trimmedText,
+      text: message,
       sender: 'user',
     };
 
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     if (!textOverride) {
       setInputText('');
     }
     setIsTyping(true);
-    setErrorMessage('');
 
-    if (!claudeApiKey) {
-      const fallbackMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text:
-          'Claude API key not configured. Add CLAUDE_API_KEY to your environment or expo config to enable real AI replies.',
-        sender: 'ai',
-      };
-      setMessages((prevMessages) => [...prevMessages, fallbackMessage]);
-      setIsTyping(false);
-      return;
-    }
-
-    try {
-      const prompt = `Human: ${trimmedText}\n\nAssistant:`;
-      const response = await fetch('https://api.anthropic.com/v1/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': claudeApiKey,
+    const aiReply = generateLocalReply(message);
+    setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          text: aiReply,
+          sender: 'ai',
         },
-        body: JSON.stringify({
-          model: 'claude-3.5',
-          prompt,
-          max_tokens_to_sample: 1000,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Claude API error: ${response.status} ${errorText}`);
-      }
-
-      const data = await response.json();
-      const aiResponse =
-        data?.completion ||
-        'Sorry, I could not read the response from Claude. Please try again.';
-
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: aiResponse.trim(),
-        sender: 'ai',
-      };
-      setMessages((prevMessages) => [...prevMessages, aiMessage]);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error talking to Claude.';
-      setErrorMessage(message);
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text:
-          'There was a problem connecting to Claude. Check your API key and network connection.',
-        sender: 'ai',
-      };
-      setMessages((prevMessages) => [...prevMessages, aiMessage]);
-    } finally {
+      ]);
       setIsTyping(false);
-    }
-  };
-
-  const handleSubmitEditing = (
-    event: NativeSyntheticEvent<TextInputSubmitEditingEventData>
-  ) => {
-    sendMessage();
+    }, 500);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.sender === 'user';
     return (
-      <View
-        style={[
-          styles.messageBubble,
-          isUser ? styles.userBubble : styles.aiBubble,
-        ]}
-      >
-        <Text style={[styles.messageText, isUser ? styles.userText : styles.aiText]}>
-          {item.text}
-        </Text>
+      <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.aiBubble]}>
+        <Text style={[styles.messageText, isUser ? styles.userText : styles.aiText]}>{item.text}</Text>
       </View>
     );
   };
@@ -186,15 +123,13 @@ export default function HomeScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Modern</Text>
-          <Text style={styles.headerSubtitle}>
-            A professional AI experience for smarter work and daily planning.
-          </Text>
+          <Text style={styles.headerSubtitle}>Manual assistant mode — no cloud service required.</Text>
         </View>
 
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Built for your mobile workflow</Text>
+          <Text style={styles.heroTitle}>Local thinking, polished design</Text>
           <Text style={styles.heroDescription}>
-            Send requests, get instant insights, and turn ideas into action with a polished AI workspace.
+            Ask questions, get structured replies, and use quick prompts all from local app logic.
           </Text>
           <View style={styles.quickActionRow}>
             {quickActions.map((action) => (
@@ -226,7 +161,7 @@ export default function HomeScreen() {
               placeholderTextColor="#9CA3AF"
               value={inputText}
               onChangeText={setInputText}
-              onSubmitEditing={handleSubmitEditing}
+              onSubmitEditing={() => sendMessage()}
               returnKeyType="send"
             />
             <TouchableOpacity style={styles.sendButton} onPress={() => sendMessage()}>
@@ -234,7 +169,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           {isTyping ? <Text style={styles.typingLabel}>Assistant is typing...</Text> : null}
-          {errorMessage ? <Text style={styles.errorLabel}>{errorMessage}</Text> : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -373,11 +307,6 @@ const styles = StyleSheet.create({
   typingLabel: {
     marginTop: 10,
     color: '#64748B',
-    fontSize: 13,
-  },
-  errorLabel: {
-    marginTop: 8,
-    color: '#B91C1C',
     fontSize: 13,
   },
 });
